@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>自定义主角-炸裂情史转盘</title>
+    <style>
+        :root {
+            --primary-color: #ff6b81;
+            --bg-color: #1a1a1a;
+            --text-color: #f1f1f1;
+            --card-bg: #2d2d2d;
+        }
+
+        body {
+            font-family: 'PingFang SC', 'Microsoft YaHei', sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .main-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 30px;
+            justify-content: center;
+            max-width: 1200px;
+            width: 100%;
+        }
+
+        /* 左侧：转盘与核心设置 */
+        .left-panel {
+            flex: 1;
+            min-width: 320px;
+            max-width: 400px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .wheel-box {
+            position: relative;
+            width: 300px;
+            height: 300px;
+            margin: 0 auto;
+        }
+
+        #wheelCanvas {
+            border-radius: 50%;
+            box-shadow: 0 0 20px rgba(255,107,129,0.3);
+            transition: transform 3.5s cubic-bezier(0.15, 0, 0.15, 1);
+        }
+
+        .pointer {
+            position: absolute;
+            top: -15px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 0;
+            height: 0;
+            border-left: 12px solid transparent;
+            border-right: 12px solid transparent;
+            border-top: 25px solid var(--primary-color);
+            z-index: 10;
+        }
+
+        button {
+            padding: 12px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: bold;
+            transition: 0.2s;
+        }
+
+        #spinBtn { background: var(--primary-color); color: white; width: 100%; }
+        #spinBtn:disabled { background: #555; }
+
+        .settings-box {
+            background: var(--card-bg);
+            padding: 15px;
+            border-radius: 12px;
+        }
+
+        .settings-box h3 { margin-top: 0; font-size: 1em; color: var(--primary-color); }
+        
+        input[type="text"], textarea {
+            width: 100%;
+            background: rgba(0,0,0,0.3);
+            color: #fff;
+            border: 1px solid #444;
+            border-radius: 6px;
+            padding: 10px;
+            box-sizing: border-box;
+            font-family: inherit;
+        }
+
+        textarea { height: 100px; margin-top: 10px; resize: none; }
+
+        /* 右侧：填空清单 */
+        .right-panel {
+            flex: 2;
+            min-width: 350px;
+            max-width: 550px;
+            background: var(--card-bg);
+            padding: 25px;
+            border-radius: 12px;
+        }
+
+        .form-title {
+            font-size: 1.3em;
+            font-weight: bold;
+            margin-bottom: 20px;
+            text-align: center;
+            color: var(--primary-color);
+        }
+
+        .form-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 12px;
+            font-size: 1.05em;
+        }
+
+        .form-label { color: #bbb; white-space: nowrap; }
+
+        .fill-blank {
+            flex: 1;
+            background: transparent;
+            border: none;
+            border-bottom: 2px solid #555;
+            color: var(--primary-color);
+            font-size: 1em;
+            font-weight: bold;
+            margin-left: 8px;
+            padding: 2px 5px;
+        }
+
+        .filling {
+            border-bottom-color: var(--primary-color);
+            animation: pulse 1s infinite;
+        }
+
+        @keyframes pulse {
+            50% { opacity: 0.5; }
+        }
+
+        .action-btns {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="main-container">
+        
+        <div class="left-panel">
+            <div class="wheel-box">
+                <div class="pointer"></div>
+                <canvas id="wheelCanvas" width="300" height="300"></canvas>
+            </div>
+            
+            <button id="spinBtn" onclick="spin()">🎉 开始旋转命运</button>
+
+            <div class="settings-box">
+                <h3>👤 设定主角名字</h3>
+                <input type="text" id="heroName" value="罗" placeholder="输入主角名字..." oninput="updateHeroName()">
+                
+                <h3 style="margin-top:15px;">👥 设定转盘候选人</h3>
+                <textarea id="nameInputs" oninput="updateWheel()">基德, 路飞, 罗宾, 贝波, 柯拉松, 明哥, 斯摩格, 索隆, 山治, 佩金, 维尔戈, 夏奇</textarea>
+            </div>
+            
+            <button style="background:#444; color:#ccc;" onclick="resetAll()">🗑️ 清空所有填空</button>
+        </div>
+
+        <div class="right-panel">
+            <div class="form-title" id="displayTitle">特拉男的炸裂情史</div>
+            <div id="formList"></div>
+        </div>
+
+    </div>
+
+    <script>
+        // 原始模版，使用 {name} 作为占位符
+        const templates = [
+            "{name}的初恋",
+            "{name}当时最讨厌的人",
+            "{name}的初吻给了",
+            "{name}的初任对象",
+            "分手后安慰{name}的",
+            "分手后谁对{name}一见钟情",
+            "{name}的第一次给了",
+            "谁一直暗恋{name}",
+            "和{name}后面在一起的",
+            "{name}放不下谁",
+            "{name}出轨了谁",
+            "{name}和谁有娃娃亲",
+            "{name}和谁准备结婚",
+            "谁主持婚礼",
+            "谁来抢婚",
+            "{name}最终和谁结婚",
+            "和谁一起度蜜月",
+            "孩子是谁的",
+            "谁因恨杀死了{name}",
+            "谁去殉情",
+            "谁去刨{name}的坟",
+            "{name}复活后第一个认出的是"
+        ];
+
+        const canvas = document.getElementById('wheelCanvas');
+        const ctx = canvas.getContext('2d');
+        let currentFillIndex = 0;
+        let isSpinning = false;
+        let currentRotation = 0;
+
+        // 更新主角名字
+        function updateHeroName() {
+            const hName = document.getElementById('heroName').value || "某人";
+            document.getElementById('displayTitle').innerText = `${hName}的炸裂情史`;
+            
+            // 更新所有 Label
+            const labels = document.querySelectorAll('.form-label');
+            templates.forEach((temp, i) => {
+                if(labels[i]) {
+                    labels[i].innerText = temp.replace(/{name}/g, hName) + "：";
+                }
+            });
+        }
+
+        // 初始化列表
+        function initForm() {
+            const list = document.getElementById('formList');
+            const hName = document.getElementById('heroName').value;
+            list.innerHTML = '';
+            templates.forEach((temp, i) => {
+                const item = document.createElement('div');
+                item.className = 'form-item';
+                item.innerHTML = `
+                    <span class="form-label">${temp.replace(/{name}/g, hName)}：</span>
+                    <input type="text" class="fill-blank" readonly>
+                `;
+                list.appendChild(item);
+            });
+            updateCurrentHighlight();
+        }
+
+        function updateCurrentHighlight() {
+            const inputs = document.querySelectorAll('.fill-blank');
+            inputs.forEach((el, i) => {
+                el.classList.toggle('filling', i === currentFillIndex && i < templates.length);
+            });
+        }
+
+        // 绘制转盘
+        function drawWheel() {
+            const names = document.getElementById('nameInputs').value.split(/,|，|\n/).map(s => s.trim()).filter(s => s);
+            ctx.clearRect(0, 0, 300, 300);
+            if (!names.length) return;
+
+            const arc = (Math.PI * 2) / names.length;
+            const colors = ["#ff6b81", "#4bcffa", "#576571", "#ff9f12", "#05c46b", "#a29bfe"];
+
+            names.forEach((name, i) => {
+                const angle = i * arc;
+                ctx.fillStyle = colors[i % colors.length];
+                ctx.beginPath();
+                ctx.arc(150, 150, 150, angle, angle + arc);
+                ctx.lineTo(150, 150);
+                ctx.fill();
+
+                ctx.save();
+                ctx.fillStyle = "white";
+                ctx.font = "bold 14px sans-serif";
+                ctx.translate(150, 150);
+                ctx.rotate(angle + arc / 2);
+                ctx.fillText(name, 140 - ctx.measureText(name).width, 5);
+                ctx.restore();
+            });
+        }
+
+        function updateWheel() { drawWheel(); }
+
+        function spin() {
+            const names = document.getElementById('nameInputs').value.split(/,|，|\n/).map(s => s.trim()).filter(s => s);
+            if (isSpinning || !names.length || currentFillIndex >= templates.length) return;
+
+            isSpinning = true;
+            document.getElementById('spinBtn').disabled = true;
+
+            const extraDeg = Math.floor(Math.random() * 360);
+            currentRotation += (1800 + extraDeg);
+            canvas.style.transform = `rotate(${currentRotation}deg)`;
+
+            setTimeout(() => {
+                isSpinning = false;
+                document.getElementById('spinBtn').disabled = false;
+                
+                // 计算逻辑：指针在正上方(270度)
+                const realAngle = (360 - (currentRotation % 360) + 270) % 360;
+                const idx = Math.floor(realAngle / (360 / names.length)) % names.length;
+                
+                const inputs = document.querySelectorAll('.fill-blank');
+                inputs[currentFillIndex].value = names[idx];
+                
+                currentFillIndex++;
+                updateCurrentHighlight();
+            }, 3500);
+        }
+
+        function resetAll() {
+            document.querySelectorAll('.fill-blank').forEach(el => el.value = '');
+            currentFillIndex = 0;
+            updateCurrentHighlight();
+            document.getElementById('spinBtn').disabled = false;
+        }
+
+        window.onload = () => {
+            initForm();
+            drawWheel();
+        };
+    </script>
+</body>
+</html>
